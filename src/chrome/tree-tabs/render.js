@@ -42,10 +42,13 @@ class Renderer {
       }
     }
 
-    const descendantCounts = new Map();
-    for (const { ancestors } of info.values()) {
+    // Badges count tabs, folders included in the walk but not in the number:
+    // "3" means three tabs disappear, however deeply they are nested.
+    const descendantTabCounts = new Map();
+    for (const [node, { ancestors }] of info) {
+      const tabCount = tree.membersOf(node).length;
       for (const a of ancestors) {
-        descendantCounts.set(a, (descendantCounts.get(a) ?? 0) + 1);
+        descendantTabCounts.set(a, (descendantTabCounts.get(a) ?? 0) + tabCount);
       }
     }
     this.#measure([...info.keys()]);
@@ -72,7 +75,8 @@ class Renderer {
       });
 
     for (const [node, { depth, hidden, ancestors }] of info) {
-      const count = descendantCounts.get(node) ?? 0;
+      const isFolderNode = isFolder(node);
+      const count = descendantTabCounts.get(node) ?? 0;
       if (depth) {
         setAttr(node, ATTR.depth, String(depth));
       } else {
@@ -82,18 +86,23 @@ class Renderer {
       node.toggleAttribute(ATTR.hidden, hidden);
       node.toggleAttribute(ATTR.hasChildren, count > 0);
 
-      const lead = tree.leadOf(node);
-      const members = tree.membersOf(node);
-      for (const member of members) {
-        this.splitMates.set(member, members.length > 1 ? members.filter(m => m !== member) : []);
-        if (member !== node) {
-          this.#clearComputed(member);
+      if (!isFolderNode) {
+        const lead = tree.leadOf(node);
+        const members = tree.membersOf(node);
+        for (const member of members) {
+          this.splitMates.set(member, members.length > 1 ? members.filter(m => m !== member) : []);
+          if (member !== node) {
+            this.#clearComputed(member);
+          }
+          if (member !== lead) {
+            this.#removeDecorations(member);
+          }
         }
-        if (member !== lead) {
-          this.#removeDecorations(member);
-        }
+        this.#decorateTab(node, count);
+      } else {
+        this.#decorateFolder(node, count);
       }
-      this.#decorate(node, count, tree.isCollapsed(node), ancestors, [...ancestors.slice(1), node].map(hasLaterSibling), {
+      this.#decorateGuides(node, count, tree.isCollapsed(node), ancestors, [...ancestors.slice(1), node].map(hasLaterSibling), {
         columns: activeColumns(node, ancestors),
         stub: pathIndex.has(node) && node !== selectedNode,
       });
@@ -117,6 +126,10 @@ class Renderer {
     for (const el of document.querySelectorAll(".ztt-twisty, .ztt-count, .ztt-guides")) {
       el.remove();
     }
+    // Folder rows are ours: saved folder records recreate them when re-enabled.
+    for (const folder of document.querySelectorAll(`.${FOLDER_CLASS}`)) {
+      folder.remove();
+    }
   }
 
   #clearComputed(el) {
@@ -132,18 +145,12 @@ class Renderer {
     tab.querySelector(".ztt-guides")?.remove();
   }
 
-  /**
-   * Twisty + collapsed badge on the favicon, and the guide lines left of the node.
-   *
-   * @param ancestors  the node's ancestors, root first.
-   * @param continues  for each level 1..depth, whether the node on this tab's
-   *                   path at that level has a later sibling (line goes on below).
-   * @param active     highlight of the selected tab's path: `columns[k]` is 0
-   *                   (off), 1 (whole row) or 2 (down to this node) for the
-   *                   ancestor-k column; `stub` lights the line under the favicon.
-   */
-  #decorate(node, count, collapsed, ancestors, continues, active) {
+  /** Twisty + collapsed badge on a tab's favicon. */
+  #decorateTab(node, count) {
     const tab = this.#tree.leadOf(node);
+    if (!tab) {
+      return;
+    }
     if (count) {
       const icon = tab.querySelector(".tab-icon-stack");
       if (icon && !icon.querySelector(".ztt-twisty")) {
@@ -153,31 +160,62 @@ class Renderer {
         badge.className = "ztt-count";
         icon.append(twisty, badge);
       }
-      setAttr(tab, ATTR.twisty, collapsed ? "closed" : "open");
-      const badge = tab.querySelector(".ztt-count");
-      const text = count > 99 ? "99+" : String(count);
-      if (badge && badge.textContent !== text) {
-        badge.textContent = text;
-      }
+      setAttr(tab, ATTR.twisty, this.#tree.isCollapsed(node) ? "closed" : "open");
+      this.#setCount(tab, count);
     } else {
       tab.removeAttribute(ATTR.twisty);
     }
+  }
 
+  /** Twisty + collapsed badge of a folder row. */
+  #decorateFolder(folder, count) {
+    if (count) {
+      setAttr(folder, ATTR.twisty, this.#tree.isCollapsed(folder) ? "closed" : "open");
+      this.#setCount(folder, count);
+    } else {
+      folder.removeAttribute(ATTR.twisty);
+    }
+  }
+
+  #setCount(el, count) {
+    const badge = el.querySelector(".ztt-count");
+    const text = count > 99 ? "99+" : String(count);
+    if (badge && badge.textContent !== text) {
+      badge.textContent = text;
+    }
+  }
+
+  /**
+   * The guide lines left of a node, drawn into the element showing the node.
+   *
+   * @param ancestors  the node's ancestors, root first.
+   * @param continues  for each level 1..depth, whether the node on this tab's
+   *                   path at that level has a later sibling (line goes on below).
+   * @param active     highlight of the selected tab's path: `columns[k]` is 0
+   *                   (off), 1 (whole row) or 2 (down to this node) for the
+   *                   ancestor-k column; `stub` lights the line under the favicon.
+   */
+  #decorateGuides(node, count, collapsed, ancestors, continues, active) {
+    const host = isFolder(node) ? node : this.#tree.leadOf(node);
+    if (!host) {
+      return;
+    }
     const depth = ancestors.length;
     const stub = count > 0 && !collapsed; // line from the favicon down to the first child
     if (!depth && !stub) {
-      tab.removeAttribute(ATTR.guides);
-      tab.querySelector(".ztt-guides")?.remove();
+      host.removeAttribute(ATTR.guides);
+      host.querySelector(":scope > .ztt-guides")?.remove();
       return;
     }
     // x positions are relative to the edge of a depth-0 node, where the guides start.
     const metrics = this.#metrics;
-    const centerOf = n => (gBrowser.isTab(n) ? metrics.tabCenter : metrics.groupCenter);
-    // A split group's guides live in its lead tab, which is inset within the group.
-    const isTab = gBrowser.isTab(node);
-    const inset = isTab ? 0 : metrics.groupInset;
-    const insetTop = isTab ? 0 : metrics.groupInsetTop;
-    const insetBottom = isTab ? 0 : metrics.groupInsetBottom;
+    const centerOf = n =>
+      gBrowser.isTab(n) || isFolder(n) ? metrics.tabCenter : metrics.groupCenter;
+    // A split view's guides live in its lead tab, which is inset within the group.
+    const isGroup = isSplitNode(node);
+    const inset = isGroup ? metrics.groupInset : 0;
+    const insetTop = isGroup ? metrics.groupInsetTop : 0;
+    const insetBottom = isGroup ? metrics.groupInsetBottom : 0;
     const ownCenter = depth * INDENT_PX + centerOf(node);
     // Segments are bordered elements rather than background gradients: borders
     // snap to whole device pixels, so every segment has the same crisp
@@ -207,12 +245,12 @@ class Renderer {
       `left:${-(depth * INDENT_PX + inset)}px;width:${ownCenter + 1}px;` +
       `top:${-insetTop}px;bottom:${-insetBottom}px`;
 
-    let guides = tab.querySelector(":scope > .ztt-guides");
+    let guides = host.querySelector(":scope > .ztt-guides");
     if (!guides) {
       guides = document.createElement("div");
       guides.className = "ztt-guides";
       // Appended last: Zen's split preview inserts relative to the tab's first child.
-      tab.append(guides);
+      host.append(guides);
     }
     // Compare with what we last wrote: the browser re-serializes cssText differently.
     if (guides.dataset.css !== css) {
@@ -236,7 +274,14 @@ class Renderer {
         })
       );
     }
-    setAttr(tab, ATTR.guides, "true");
+    setAttr(host, ATTR.guides, "true");
+  }
+
+  #setRootVar(name, value) {
+    const root = document.documentElement;
+    if (root.style.getPropertyValue(name) !== value) {
+      root.style.setProperty(name, value);
+    }
   }
 
   /**
@@ -252,10 +297,13 @@ class Renderer {
       return rect?.width ? rect.left + rect.width / 2 - bounds(node).left : null;
     };
     const tab = nodes.find(n => gBrowser.isTab(n) && !n.hasAttribute(ATTR.hidden));
-    const group = nodes.find(n => !gBrowser.isTab(n) && !n.hasAttribute(ATTR.hidden));
+    const group = nodes.find(n => isSplitNode(n) && !n.hasAttribute(ATTR.hidden));
     const tabCenter = tab && iconCenter(tab, tab);
     if (tabCenter) {
       this.#metrics.tabCenter = Math.round(tabCenter);
+      this.#setRootVar("--ztt-icon-center", `${this.#metrics.tabCenter}px`);
+      // Folder rows are plain elements: give them a tab's row height.
+      this.#setRootVar("--ztt-row-height", `${Math.round(bounds(tab).height)}px`);
     }
     const lead = group && this.#tree.leadOf(group);
     const groupCenter = lead && iconCenter(group, lead);

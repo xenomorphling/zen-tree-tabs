@@ -1,8 +1,12 @@
-# Zen Tree Tabs
+# Zen Tree Tabs with Folders
 
 Tree Style Tab–like tab trees for [Zen](https://zen-browser.app), right in Zen's own
-tab list. Links you open land under the page they came from, so a rabbit hole stays
-one tidy branch.
+tab list, plus named folders you can create anywhere in the tree. Links you open
+land under the page they came from, so a rabbit hole stays one tidy branch.
+
+This is a fork of [Ludonope/zen-tree-tabs](https://github.com/Ludonope/zen-tree-tabs)
+that adds [folders](#folders). It installs under its own name and IDs, so you can
+tell it apart from the original in Sine's mod list and in `about:addons`.
 
 | Collapse and expand | Move a branch |
 | :---: | :---: |
@@ -20,12 +24,19 @@ one tidy branch.
   come along.
 - **See where you are.** Guide lines connect parents and children, and the branch
   leading to your current tab is highlighted.
+- **Folders.** Group a part of a tree under a named folder and nest folders in
+  folders. A folder takes its place in the tree like a tab: it can be collapsed,
+  dragged around with its contents, and dropped inside a tab or another folder.
+  Unlike Zen's pinned folders, these live in the normal tab list next to your
+  tabs. Right-click any tab and choose **Tree → New Folder** to wrap it, or
+  right-click a folder to rename it, add a subfolder, or unpack it.
 - **Tree menu.** Right-click a tab and open **Tree** to collapse, close a whole
   tree, nest a tab under the sibling above it, move it out of its parent, and more.
   The most common actions also have [keyboard shortcuts](#keyboard-shortcuts).
 - **Split views stay in the tree.** A split counts as one entry, with its place and
   its children kept.
-- **Saved automatically.** Trees survive restarts and look the same in every window.
+- **Saved automatically.** Trees and folders survive restarts and look the same in
+  every window.
 
 ### Keyboard shortcuts
 
@@ -34,21 +45,43 @@ one tidy branch.
 | `Alt+Shift+→` | Nest under sibling above (the tab becomes its last child)     |
 | `Alt+Shift+←` | Move out of parent (the tab becomes the parent's next sibling) |
 | `Alt+Shift+↓` | Collapse or expand the current branch                         |
+| `Alt+Shift+N` | New folder around the current tab                             |
+
+### Folders
+
+A folder is a row in the tab list with a name, so it nests like any other tree
+node. Only the rows you see exist: closing the last tab inside a folder removes
+the folder.
+
+| Where | Action |
+| --- | --- |
+| Tab menu → **Tree → New Folder** | Wraps the tab in a new folder and opens its name for editing |
+| Folder menu → **Rename Folder…** (or double-click the name) | Renames the folder |
+| Folder menu → **New Subfolder** | Wraps the folder's first child in a nested folder |
+| Folder menu → **Unpack Folder** | Removes the folder and moves its tabs up one level |
+| Click a folder | Collapses or expands it (the badge shows how many tabs it hides) |
+| Drag a tab onto the middle of a folder | Puts the tab inside the folder |
+| Drag a folder | Moves the folder and everything inside it |
+
+Dropping on the upper or lower edge of a folder row puts the tabs before the folder
+or after everything inside it. Press `Enter` to keep the name of a folder you just
+created, or `Esc` to drop the folder again.
 
 ### Good to know
 
 - Closing a parent doesn't close its children: the first child takes its place.
 - Pinned tabs and essentials are never part of a tree. Pinning a tab, or moving it
   into a folder, takes it out of its tree.
-- Each space has its own trees.
+- Each space has its own trees. A folder belongs to the space its tabs are in;
+  moving its last tab to another space leaves the folder behind.
 - Tabs that were already open when you install stay flat; trees form as you browse.
 - Zen's drag-to-split still works: hold the dragged tab over another one a little
   longer, until the split preview appears.
 
 ## Install
 
-There are two ways to install Zen Tree Tabs. Both run the same code and use the same
-saved trees, so you can switch between them without losing anything.
+There are two ways to install Zen Tree Tabs with Folders. Both run the same code and
+use the same saved trees, so you can switch between them without losing anything.
 
 - **[As a Sine mod](#as-a-sine-mod).** Best if you already use the
   [Sine](https://github.com/CosmoCreeper/Sine) mod manager. You get updates from
@@ -56,7 +89,8 @@ saved trees, so you can switch between them without losing anything.
 - **[As an add-on (`.xpi`)](#as-an-add-on-xpi).** Needs no extra tools, only two
   prefs.
 
-If both are installed, only one copy runs and the other stays idle.
+If both are installed, only one copy runs and the other stays idle. The one in use is
+the **Zen Tree Tabs with Folders** entry.
 
 ### As a Sine mod
 
@@ -76,7 +110,7 @@ You need Sine installed already. See
 2. Click the gear button next to the `username/repo` install field, and turn on
    **Enable installing JS from unofficial sources**. This is the
    `sine.allow-unsafe-js` pref.
-3. In the install field, enter `Ludonope/zen-tree-tabs` and click **Install**.
+3. In the install field, enter `xenomorphling/zen-tree-tabs` and click **Install**.
 4. Restart Zen.
 
 **Troubleshooting:** if the mod shows as installed but links don't nest, the setting
@@ -89,7 +123,7 @@ can disable it from there too, without restarting.
 ### As an add-on (`.xpi`)
 
 The add-on comes as a single `.xpi` file. Get the latest one from the
-[Releases page](https://github.com/Ludonope/zen-tree-tabs/releases), or build it
+[Releases page](https://github.com/xenomorphling/zen-tree-tabs/releases), or build it
 yourself (see [Distributing](#distributing)).
 
 #### Why it needs two prefs
@@ -115,12 +149,12 @@ Do this once for each Zen profile:
    - `xpinstall.signatures.required` → `false`
    - `extensions.experiments.enabled` → `true`
 3. Open `about:addons`, click the gear icon, and choose **Install Add-on From File…**.
-   Pick `zen-tree-tabs-<version>.xpi` and confirm. You can also drag the `.xpi` onto
-   a Zen window.
+   Pick `zen-tree-tabs-with-folders-<version>.xpi` and confirm. You can also drag the
+   `.xpi` onto a Zen window.
 
 The add-on starts right away, without a restart. Your existing tabs stay flat; new
-trees form as you open links. It should now appear as **Zen Tree Tabs** in
-`about:addons`.
+trees form as you open links. It should now appear as **Zen Tree Tabs with Folders**
+in `about:addons`.
 
 **Troubleshooting**
 
@@ -182,15 +216,16 @@ To publish a new version:
    ```
 
    The [Release workflow](.github/workflows/release.yml) builds
-   `zen-tree-tabs-<version>.xpi` and publishes it as a GitHub release. It refuses to
-   publish if the tag doesn't match the manifest version.
+   `zen-tree-tabs-with-folders-<version>.xpi` and publishes it as a GitHub release.
+   It refuses to publish if the tag doesn't match the manifest version.
 
 To build the `.xpi` locally, run `tools/build.sh`. The file goes to `dist/`, which is
 gitignored.
 
-Don't change the add-on ID (`zen-tree-tabs@ludonope` in the manifest). Zen uses it to
-recognize updates, so a different ID would install a second copy alongside the
-first.
+Don't change the add-on ID (`zen-tree-tabs-with-folders@ludonope` in the manifest).
+Zen uses it to recognize updates, so a different ID would install yet another copy
+alongside this one, and the Sine mod ID (`zen-tree-tabs-with-folders` in
+[theme.json](theme.json)) likewise names the folder Sine keeps the mod in.
 
 ### Sine
 

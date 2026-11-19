@@ -1,17 +1,17 @@
 {
-  "id": "zen-tree-tabs",
-  "name": "Zen Tree Tabs",
-  "description": "Tree Style Tab-like tab trees inside Zen's native vertical tab strip: auto-nesting, collapsing, guide lines, drag to nest, split view support.",
-  "homepage": "https://github.com/Ludonope/zen-tree-tabs",
-  "author": "Ludonope",
-  "version": "0.4.6",
-  "tags": ["tabs", "tree", "sidebar", "vertical tabs"],
+  "id": "zen-tree-tabs-with-folders",
+  "name": "Zen Tree Tabs with Folders",
+  "description": "Fork of Zen Tree Tabs with named folders: tree style tab trees inside Zen's native vertical tab strip, with auto-nesting, collapsing, guide lines, drag to nest and split view support.",
+  "homepage": "https://github.com/xenomorphling/zen-tree-tabs",
+  "author": "xenomorphling (fork of Ludonope)",
+  "version": "0.5.0",
+  "tags": ["tabs", "tree", "folders", "sidebar", "vertical tabs"],
   "createdAt": "2026-11-15",
   "readme": "README.md",
   "scripts": {
     "src/chrome/tree-tabs.uc.js": {
       "name": "Tree tabs",
-      "description": "Tab tree model, guide lines, drag and drop, context menu and shortcuts. Loads src/chrome/tree-tabs.css itself.",
+      "description": "Tab and folder tree model, guide lines, drag and drop, context menu and shortcuts. Loads src/chrome/tree-tabs.css itself.",
       "include": ["chrome://browser/content/browser.xhtml"]
     }
   },

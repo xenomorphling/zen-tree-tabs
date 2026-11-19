@@ -1,4 +1,5 @@
-/* Zen Tree Tabs: tree style tabs in Zen's native vertical tab strip.
+/* Zen Tree Tabs with Folders: tree style tabs in Zen's native vertical tab strip,
+ * with named folders in the tree.
  *
  * Entry point, loaded into every browser window either by the add-on
  * (experiment/parent.js) or by the Sine mod manager (theme.json). It loads the
@@ -8,10 +9,12 @@
  *
  *   tree-tabs/common.js      constants and DOM helpers
  *   tree-tabs/tree.js        the tree model: nodes, links, queries, edits
+ *   tree-tabs/folders.js     named folder rows and their saved records
  *   tree-tabs/render.js      depth, visibility, twisty, badge, guide lines
  *   tree-tabs/store.js       session persistence and window sync
  *   tree-tabs/dnd.js         drop-as-child for Zen's drag and drop
- *   tree-tabs/ui.js          context menu and keyboard shortcuts
+ *   tree-tabs/folder-dnd.js  dragging folder rows, click and rename
+ *   tree-tabs/ui.js          context menus and keyboard shortcuts
  *   tree-tabs/controller.js  tab events, tree edits, user actions
  */
 "use strict";
@@ -21,7 +24,7 @@
   if (window.gZenTreeTabs) {
     return;
   }
-  const PARTS = ["common", "tree", "render", "store", "dnd", "ui", "controller"];
+  const PARTS = ["common", "tree", "folders", "render", "store", "dnd", "folder-dnd", "ui", "controller"];
 
   const scriptURL = Components.stack.filename;
   const sibling = path => {

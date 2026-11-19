@@ -29,6 +29,7 @@ function createTreeMenu(ctrl) {
     toggle: { label: "Collapse Tree", run: n => ctrl.toggleCollapsed(n) },
     closeTree: { label: "Close Tree", run: n => ctrl.closeTree(n) },
     closeChildren: { label: "Close Children", run: n => ctrl.closeChildren(n) },
+    newFolder: { label: "New Folder", key: "Alt+Shift+N", run: n => ctrl.createFolderAround(n) },
     sep1: null,
     nest: { label: "Nest Under Sibling Above", key: "Alt+Shift+→", run: n => ctrl.nestUnderSiblingAbove(n) },
     moveOut: { label: "Move Out of Parent", key: "Alt+Shift+←", run: n => ctrl.moveOutOfParent(n) },
@@ -93,6 +94,7 @@ function createTreeMenu(ctrl) {
     elements.toggle.disabled = !hasChildren;
     elements.closeTree.disabled = !hasChildren;
     elements.closeChildren.disabled = !hasChildren;
+    elements.newFolder.hidden = isFolder(node);
     elements.nest.disabled = !tree.previousSibling(node);
     elements.moveOut.disabled = !hasParent;
     elements.detach.disabled = !hasParent;
@@ -106,6 +108,80 @@ function createTreeMenu(ctrl) {
   };
 }
 
+function createFolderMenu(ctrl) {
+  const tree = ctrl.tree;
+  const make = (tag, attrs = {}) => {
+    const el = document.createXULElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      el.setAttribute(k, v);
+    }
+    return el;
+  };
+  const popup = make("menupopup", { id: "ztt-folder-context" });
+  const items = {
+    rename: { label: "Rename Folder…", run: f => ctrl.folders.startRename(f) },
+    subfolder: { label: "New Subfolder", run: f => ctrl.createSubfolder(f) },
+    sepA: null,
+    toggle: { label: "Collapse Folder", run: f => ctrl.toggleCollapsed(f) },
+    sepB: null,
+    nest: { label: "Nest Under Sibling Above", run: f => ctrl.nestUnderSiblingAbove(f) },
+    moveOut: { label: "Move Out of Parent", run: f => ctrl.moveOutOfParent(f) },
+    detach: { label: "Detach from Tree", run: f => ctrl.detachFromTree(f) },
+    up: { label: "Move Up", run: f => ctrl.moveNodeUp(f) },
+    down: { label: "Move Down", run: f => ctrl.moveNodeDown(f) },
+    sepC: null,
+    close: { label: "Close Folder", run: f => ctrl.closeTree(f) },
+    unpack: { label: "Unpack Folder", run: f => ctrl.deleteFolder(f) },
+  };
+  const elements = {};
+  let folder = null;
+  for (const [name, item] of Object.entries(items)) {
+    if (!item) {
+      popup.append(make("menuseparator"));
+      continue;
+    }
+    const el = make("menuitem", { id: `ztt-folder-${name}`, label: item.label });
+    el.addEventListener("command", () => {
+      if (folder?.isConnected) {
+        item.run(folder);
+      }
+    });
+    popup.append(el);
+    elements[name] = el;
+  }
+
+  const onContextMenu = event => {
+    const row = event.target.closest?.(`.${FOLDER_CLASS}`);
+    if (!row || !row.parentElement?.classList.contains(SECTION_CLASS)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    folder = row;
+    const hasParent = !!tree.parentOf(folder);
+    const hasChildren = folder.hasAttribute(ATTR.hasChildren);
+    // The collapsed sidebar shows no labels, so there is nothing to rename there.
+    elements.rename.disabled = !isSidebarExpanded();
+    elements.toggle.setAttribute("label", tree.isCollapsed(folder) ? "Expand Folder" : "Collapse Folder");
+    elements.toggle.disabled = !hasChildren;
+    elements.close.disabled = !hasChildren;
+    elements.nest.disabled = !tree.previousSibling(folder);
+    elements.moveOut.disabled = !hasParent;
+    elements.detach.disabled = !hasParent;
+    elements.up.disabled = !tree.previousSibling(folder);
+    elements.down.disabled = !tree.nextSibling(folder);
+    popup.openPopupAtScreen(event.screenX, event.screenY, true);
+  };
+
+  const popupSet = document.getElementById("mainPopupSet") ?? document.documentElement;
+  popupSet.append(popup);
+  window.addEventListener("contextmenu", onContextMenu, true);
+  return () => {
+    window.removeEventListener("contextmenu", onContextMenu, true);
+    popup.remove();
+  };
+}
+
 function createShortcuts(ctrl) {
   const tree = ctrl.tree;
   const keyset = document.createXULElement("keyset");
@@ -115,6 +191,7 @@ function createShortcuts(ctrl) {
   const shortcuts = [
     ["VK_RIGHT", node => ctrl.nestUnderSiblingAbove(node)],
     ["VK_LEFT", node => ctrl.moveOutOfParent(node)],
+    ["VK_N", node => ctrl.createFolderAround(node)],
     [
       "VK_DOWN",
       node => {

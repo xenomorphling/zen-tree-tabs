@@ -1,4 +1,4 @@
-/* Zen Tree Tabs – loaded as an author sheet into browser windows.
+/* Zen Tree Tabs with Folders – loaded as an author sheet into browser windows.
  *
  * --ztt-indent-step is set on :root by tree-tabs.js;
  * --ztt-depth is set on each indented node (tab or split-view group).
@@ -7,6 +7,9 @@
 :root {
   --ztt-guide-color: color-mix(in srgb, currentColor 22%, transparent);
   --ztt-guide-active-color: color-mix(in srgb, currentColor 85%, transparent);
+  /* Favicon center from the left edge of a row, measured by the renderer. */
+  --ztt-icon-center: 19px;
+  --ztt-drop-line: color-mix(in srgb, currentColor 70%, transparent);
   /* Resolved here, where Zen's split view hasn't overridden it to 1. */
   --ztt-press-scale: var(--zen-active-tab-scale, 0.985);
 }
@@ -14,12 +17,12 @@
 /* ------------------------------------------------------------ indentation */
 
 /* Stacks on top of Zen's own folder indent. */
-:root[zen-sidebar-expanded="true"] #tabbrowser-tabs :is(.tabbrowser-tab, tab-group[split-view-group])[ztt-depth]:not([zen-glance-tab]) {
+:root[zen-sidebar-expanded="true"] #tabbrowser-tabs :is(.tabbrowser-tab, tab-split-view-wrapper, tab-group[split-view-group], .ztt-folder)[ztt-depth]:not([zen-glance-tab]) {
   margin-inline-start: calc(var(--zen-folder-indent, 0px) + var(--ztt-depth) * var(--ztt-indent-step)) !important;
 }
 
 /* Collapsed subtrees. */
-#tabbrowser-tabs :is(.tabbrowser-tab, tab-group[split-view-group])[ztt-hidden] {
+#tabbrowser-tabs :is(.tabbrowser-tab, tab-split-view-wrapper, tab-group[split-view-group], .ztt-folder)[ztt-hidden] {
   display: none !important;
 }
 
@@ -149,6 +152,134 @@
   display: block;
 }
 
+/* ---------------------------------------------------------------- folders */
+
+/* A named group row in the tab tree. It has no tab of its own: the row is the
+ * node, so indentation and guides are drawn on it directly. */
+.ztt-folder {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-self: stretch;
+  align-items: center;
+  box-sizing: border-box;
+  height: var(--ztt-row-height, var(--tab-min-height, 36px));
+  margin-block: var(--tab-margin-block, 2px);
+  padding-inline: calc(var(--ztt-icon-center) - 8px) 8px;
+  border-radius: var(--tab-border-radius, 8px);
+  color: var(--toolbar-color, inherit);
+  cursor: default;
+  user-select: none;
+  -moz-window-dragging: no-drag;
+}
+
+.ztt-folder:hover {
+  background-color: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.ztt-folder-icon {
+  position: relative;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-inline-end: 10px;
+  background: url("chrome://browser/skin/zen-icons/folder.svg") center / 16px no-repeat;
+  -moz-context-properties: fill, fill-opacity;
+  fill: currentColor;
+  fill-opacity: 0.9;
+}
+
+.ztt-folder-label {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ztt-folder-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  outline: none !important;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+}
+
+/* The folder icon turns into the twisty on hover, like a tab's favicon. */
+.ztt-folder-icon > .ztt-twisty {
+  position: absolute;
+  inset: 0;
+  display: none;
+  width: 16px;
+  height: 16px;
+  margin: auto;
+}
+
+.ztt-folder:hover > .ztt-folder-icon > .ztt-twisty,
+.ztt-folder[ztt-twisty="closed"] > .ztt-folder-icon > .ztt-twisty {
+  display: block;
+}
+
+.ztt-folder:hover > .ztt-folder-icon,
+.ztt-folder[ztt-twisty="closed"] > .ztt-folder-icon {
+  background-image: none;
+}
+
+.ztt-folder[ztt-twisty="closed"] .ztt-twisty {
+  rotate: -90deg;
+}
+
+.ztt-folder-icon > .ztt-count {
+  position: absolute;
+  inset-block-end: -4px;
+  inset-inline-start: 10px;
+  display: none;
+  margin: 0;
+  translate: none;
+}
+
+.ztt-folder[ztt-twisty="closed"] > .ztt-folder-icon > .ztt-count {
+  display: block;
+}
+
+/* In the collapsed sidebar a folder shows just its icon, like a tab's favicon. */
+:root:not([zen-sidebar-expanded="true"]) .ztt-folder {
+  width: var(--tab-min-width, 48px);
+  margin-inline: auto;
+  justify-content: center;
+  padding-inline: 0;
+}
+
+:root:not([zen-sidebar-expanded="true"]) .ztt-folder-label,
+:root:not([zen-sidebar-expanded="true"]) .ztt-folder-input {
+  display: none;
+}
+
+:root:not([zen-sidebar-expanded="true"]) .ztt-folder-icon {
+  margin-inline-end: 0;
+}
+
+/* Guides are drawn in the indentation left of the row. */
+.ztt-folder > .ztt-guides {
+  position: absolute;
+  inset-block: 0;
+  pointer-events: none;
+}
+
+.ztt-folder[ztt-dragging-folder] {
+  opacity: 0.55;
+}
+
+:root[ztt-dragging-folder] #tabbrowser-tabs * {
+  cursor: grabbing !important;
+}
+
 /* -------------------------------------------------- drop as child (drag) */
 
 :root[ztt-dropping-child] #zen-drag-indicator {
@@ -156,9 +287,37 @@
 }
 
 .tabbrowser-tab[ztt-drop-target] .tab-background,
-tab-group[split-view-group][ztt-drop-target] .tab-background {
+tab-split-view-wrapper[ztt-drop-target] .tab-background,
+tab-group[split-view-group][ztt-drop-target] .tab-background,
+.ztt-folder[ztt-drop-target] {
   /* Neutral contrast like the guides: the accent can be too dark in some themes. */
   outline: 1.5px solid color-mix(in srgb, currentColor 60%, transparent) !important;
   outline-offset: -1.5px;
   background-color: color-mix(in srgb, currentColor 12%, transparent) !important;
+}
+
+/* Insertion line for a folder row dragged above or below another row. */
+:is(.tabbrowser-tab, tab-split-view-wrapper, tab-group[split-view-group], .ztt-folder)[ztt-drop-before],
+:is(.tabbrowser-tab, tab-split-view-wrapper, tab-group[split-view-group], .ztt-folder)[ztt-drop-after] {
+  position: relative;
+}
+
+:is(.tabbrowser-tab, tab-split-view-wrapper, tab-group[split-view-group], .ztt-folder)[ztt-drop-before]::after,
+:is(.tabbrowser-tab, tab-split-view-wrapper, tab-group[split-view-group], .ztt-folder)[ztt-drop-after]::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  height: 2px;
+  border-radius: 1px;
+  background-color: var(--ztt-drop-line);
+  pointer-events: none;
+  z-index: 2;
+}
+
+:is(.tabbrowser-tab, tab-split-view-wrapper, tab-group[split-view-group], .ztt-folder)[ztt-drop-before]::after {
+  inset-block-start: -1px;
+}
+
+:is(.tabbrowser-tab, tab-split-view-wrapper, tab-group[split-view-group], .ztt-folder)[ztt-drop-after]::after {
+  inset-block-end: -1px;
 }

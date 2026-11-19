@@ -21,9 +21,11 @@ const TAB_EVENTS = [
 
 class ZenTreeTabs {
   tree = new Tree();
+  folders = new Folders(this.tree, () => this.rebuild());
   renderer = new Renderer(this.tree);
-  store = new Store(() => this.scheduleFlush());
+  store = new Store(() => this.scheduleFlush(), this.folders);
   dnd = new DragAndDrop(this.tree, () => this.scheduleFlush());
+  folderDrag = new FolderDrag(this);
 
   #flushQueued = false;
   #pendingOpens = new Set();
@@ -50,7 +52,9 @@ class ZenTreeTabs {
         window.removeEventListener("click", this, true);
       },
       this.dnd.attach(),
+      this.folderDrag.attach(),
       createTreeMenu(this),
+      createFolderMenu(this),
       createShortcuts(this)
     );
 
@@ -115,10 +119,13 @@ class ZenTreeTabs {
         }
         this.scheduleFlush(); // highlight the new active path
         break;
-      case "TabPinned":
+      case "TabPinned": {
+        const folder = this.tree.parentOf(this.nodeOf(target));
         this.tree.detach(target);
+        this.pruneFolder(folder);
         this.scheduleFlush();
         break;
+      }
       case "SSTabRestoring":
         this.store.restore(target);
         this.scheduleFlush();
@@ -140,7 +147,7 @@ class ZenTreeTabs {
       return;
     }
     const parent = tree.nodeOf(opener);
-    if (!tree.isNode(parent) || parent.parentElement !== tab.parentElement) {
+    if (!tree.isNode(parent) || sectionOf(parent) !== sectionOf(tab)) {
       return;
     }
     tree.setParent(tab, parent);
@@ -154,6 +161,7 @@ class ZenTreeTabs {
 
   #onTabClose(tab) {
     const tree = this.tree;
+    const folder = tree.parentOf(tree.nodeOf(tab));
     // Zen may already have dissolved the split group, so use the remembered mates.
     const others = (this.renderer.splitMates.get(tab) ?? []).filter(t => t.isConnected && !t.closing);
     if (others.length) {
@@ -177,6 +185,7 @@ class ZenTreeTabs {
     } else {
       tree.promoteChildren(tab);
     }
+    this.pruneFolder(folder);
     this.scheduleFlush();
   }
 
@@ -186,16 +195,25 @@ class ZenTreeTabs {
     if (!tree.isNode(node)) {
       return;
     }
+    const oldParent = tree.parentOf(node);
+    // Children the node left behind in its old space take its place there.
+    const strays = tree.strayChildrenOf(node);
+    if (strays.length) {
+      tree.promoteStrays(node, strays);
+    }
     let descendants = tree.descendantsOf(node);
-    if (descendants.some(d => d.parentElement !== node.parentElement)) {
-      // Moved to another space: it leaves its tree behind.
+    if (descendants.some(d => sectionOf(d) !== sectionOf(node))) {
+      // Moved to another space: it leaves its tree behind, and its folders stay
+      // in the space they belong to (an empty one is pruned below).
       tree.promoteChildren(node);
       tree.setCollapsedAttr(node, false);
       descendants = [];
     } else if (descendants.length) {
-      const inPlace = descendants.every((d, i) => tree.nextNode(i ? descendants[i - 1] : node) === d);
+
+      const children = tree.childrenOf(node);
+      const inPlace = children.every((child, i) => tree.nextNode(i ? children[i - 1] : node) === child);
       if (!inPlace) {
-        tree.moveNodesAfter(descendants, node);
+        tree.moveSubtreesAfter(children, node);
       }
     }
 
@@ -204,7 +222,6 @@ class ZenTreeTabs {
     }
     const next = tree.nextNode(descendants.at(-1) ?? node);
     const nextParent = next ? tree.parentOf(next) : null;
-    const oldParent = tree.parentOf(node);
     let newParent = nextParent;
     if (oldParent && tree.isInsideSubtree(node, oldParent)) {
       // Still among its siblings: keep the parent, unless the next node needs
@@ -215,6 +232,9 @@ class ZenTreeTabs {
       // For split groups this also gives every member the same parent, so
       // whichever tab survives the split keeps the group's place.
       tree.setParent(node, newParent);
+    }
+    if (newParent !== oldParent) {
+      this.pruneFolder(oldParent);
     }
   }
 
@@ -273,7 +293,9 @@ class ZenTreeTabs {
       for (const tab of grouped) {
         // Folders take tabs out of the tree; split views keep them in as a group node.
         if (tab.isConnected && tab.group && !this.tree.splitGroupOf(tab)) {
+          const folder = this.tree.parentOf(this.tree.nodeOf(tab));
           this.tree.detach(tab);
+          this.pruneFolder(folder);
         }
       }
 
@@ -290,6 +312,7 @@ class ZenTreeTabs {
       for (const node of sorted) {
         this.#onNodeMoved(node);
       }
+      this.pruneLooseFolders();
     } catch (e) {
       console.error("zen-tree-tabs: flush failed", e);
     }
@@ -311,7 +334,7 @@ class ZenTreeTabs {
       return;
     }
     if (collapsed && tree.isAncestor(node, this.nodeOf(gBrowser.selectedTab))) {
-      gBrowser.selectedTab = tree.leadOf(node);
+      gBrowser.selectedTab = tree.firstTabOf(node) ?? gBrowser.selectedTab;
     }
     tree.setCollapsedAttr(node, collapsed);
     this.rebuild();
@@ -327,7 +350,7 @@ class ZenTreeTabs {
     for (const node of tree.allNodes()) {
       if (node.hasAttribute(ATTR.hasChildren)) {
         if (collapsed && tree.isAncestor(node, selected) && !tree.parentOf(node)) {
-          gBrowser.selectedTab = tree.leadOf(node);
+          gBrowser.selectedTab = tree.firstTabOf(node) ?? gBrowser.selectedTab;
         }
         tree.setCollapsedAttr(node, collapsed);
       }
@@ -350,8 +373,10 @@ class ZenTreeTabs {
     if (!sibling) {
       return;
     }
+    const oldParent = tree.parentOf(node);
     tree.setParent(node, sibling);
     tree.setCollapsedAttr(sibling, false);
+    this.pruneFolder(oldParent);
     this.rebuild();
   }
 
@@ -362,8 +387,10 @@ class ZenTreeTabs {
     if (!parent) {
       return;
     }
+    const oldParent = tree.parentOf(parent);
     this.#moveSubtreeAfterTree(node, parent);
     tree.setParentId(node, tree.parentIdOf(parent));
+    this.pruneFolder(oldParent);
     this.rebuild();
   }
 
@@ -377,8 +404,10 @@ class ZenTreeTabs {
     while (tree.parentOf(root)) {
       root = tree.parentOf(root);
     }
+    const oldParent = tree.parentOf(node);
     this.#moveSubtreeAfterTree(node, root);
     tree.setParent(node, null);
+    this.pruneFolder(oldParent);
     this.rebuild();
   }
 
@@ -388,8 +417,97 @@ class ZenTreeTabs {
     const subtree = tree.subtreeOf(node);
     const last = tree.descendantsOf(ancestor).filter(n => !subtree.includes(n)).at(-1) ?? ancestor;
     if (tree.nextNode(last) !== node) {
-      tree.moveNodesAfter(subtree, last);
+      tree.moveSubtreesAfter([node], last);
     }
+  }
+
+  // --------------------------------------------------------------- folders
+
+  /** "New Folder": wraps a node in a new folder, in place. */
+  createFolderAround(node) {
+    const tree = this.tree;
+    if (!tree.isNode(node)) {
+      return null;
+    }
+    const parent = tree.parentOf(node);
+    const folder = this.folders.create({ parent: parent ? tree.linkIdOf(parent) : null });
+    node.before(folder);
+    tree.setParent(node, folder);
+    this.rebuild();
+    this.folders.startRename(folder, { cancel: () => this.deleteFolder(folder) });
+    return folder;
+  }
+
+  /** "New Subfolder": wraps the folder's first child, or adds a row to it. */
+  createSubfolder(folder) {
+    const tree = this.tree;
+    const first = tree.childrenOf(folder)[0];
+    const sub = this.folders.create({ parent: tree.linkIdOf(folder) });
+    if (first) {
+      first.before(sub);
+      tree.setParent(first, sub);
+    } else {
+      tree.lastElementOf(folder).after(sub);
+    }
+    this.rebuild();
+    this.folders.startRename(sub, { cancel: () => this.deleteFolder(sub) });
+    return sub;
+  }
+
+  /** "Unpack Folder": the row goes away, its tabs move up to the folder's parent. */
+  deleteFolder(folder) {
+    if (!isFolder(folder)) {
+      return;
+    }
+    const tree = this.tree;
+    const parentId = tree.parentIdOf(folder);
+    for (const child of tree.childrenOf(folder)) {
+      tree.setParentId(child, parentId);
+    }
+    const parent = tree.parentOf(folder);
+    folder.remove();
+    this.pruneFolder(parent);
+    this.rebuild();
+  }
+
+  /** Removes a folder row that lost its last tab, and empty folders above it. */
+  pruneFolder(folder) {
+    let current = folder;
+    while (isFolder(current) && current.isConnected && this.folders.isEmpty(current)) {
+      const parent = this.tree.parentOf(current);
+      current.remove();
+      current = parent;
+    }
+  }
+
+  /** Removes folders left empty by moves Zen made on its own (e.g. to another space). */
+  pruneLooseFolders() {
+    for (const folder of document.querySelectorAll(`.${FOLDER_CLASS}`)) {
+      if (folder.isConnected && this.folders.isEmpty(folder)) {
+        this.pruneFolder(folder);
+      }
+    }
+  }
+
+  /** Swaps `node` with the sibling above it, subtree and all. */
+  moveNodeUp(node) {
+    const previous = this.tree.isNode(node) && this.tree.previousSibling(node);
+    if (!previous) {
+      return;
+    }
+    this.tree.moveSubtreesBefore([node], previous);
+    this.rebuild();
+  }
+
+  /** Swaps `node` with the sibling below it, subtree and all. */
+  moveNodeDown(node) {
+    const tree = this.tree;
+    const next = tree.isNode(node) && tree.nextSibling(node);
+    if (!next) {
+      return;
+    }
+    tree.moveSubtreesAfter([node], tree.lastElementOf(next));
+    this.rebuild();
   }
 
   closeTree(node) {

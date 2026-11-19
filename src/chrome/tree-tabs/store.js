@@ -1,23 +1,36 @@
 /* Persistence and window sync. Each tab's links are saved in Zen's session
  * data (survives restarts and add-on updates) and pushed to the mirrored copy
- * of the tab in Zen's other synced windows, matched by tab id. */
+ * of the tab in Zen's other synced windows, matched by tab id.
+ *
+ * Folder rows have no tab of their own, so the tab right after a folder saves
+ * that folder's record in its own state (see Folders). */
 "use strict";
 
 class Store {
   /** tab -> last persisted state string, to only write/broadcast changes. */
   #saved = new WeakMap();
   #onRemoteChange;
+  #folders;
 
   /** @param onRemoteChange called when another window changed one of our tabs. */
-  constructor(onRemoteChange) {
+  constructor(onRemoteChange, folders) {
     this.#onRemoteChange = onRemoteChange;
+    this.#folders = folders;
   }
 
   /** Serialized links of a tab ("" when it has none). */
   stateOf(tab) {
     const parent = tab.getAttribute(ATTR.parent);
     const collapsed = tab.hasAttribute(ATTR.collapsed);
-    return parent || collapsed ? JSON.stringify({ parent: parent || null, collapsed }) : "";
+    const folders = this.#folders.recordsAround(tab);
+    if (!parent && !collapsed && !folders.length) {
+      return "";
+    }
+    const state = { parent: parent || null, collapsed };
+    if (folders.length) {
+      state.folders = folders;
+    }
+    return JSON.stringify(state);
   }
 
   #applyState(tab, value) {
@@ -31,6 +44,7 @@ class Store {
       tab.removeAttribute(ATTR.parent);
     }
     tab.toggleAttribute(ATTR.collapsed, !!state.collapsed);
+    this.#folders.applyAround(tab, Array.isArray(state.folders) ? state.folders : []);
   }
 
   /** Reads a tab's links back from the session. */
@@ -42,8 +56,13 @@ class Store {
 
   /** Saves and broadcasts every tab whose links changed. */
   persistAll() {
-    for (const tab of gBrowser.tabs) {
-      this.#persist(tab);
+    this.#folders.beginPass();
+    try {
+      for (const tab of gBrowser.tabs) {
+        this.#persist(tab);
+      }
+    } finally {
+      this.#folders.endPass();
     }
   }
 

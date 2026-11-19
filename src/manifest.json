@@ -1,11 +1,11 @@
 {
   "manifest_version": 2,
-  "name": "Zen Tree Tabs",
-  "version": "0.4.6",
-  "description": "Tree style tabs integrated into Zen's native vertical tab strip.",
+  "name": "Zen Tree Tabs with Folders",
+  "version": "0.5.0",
+  "description": "Tree style tabs with named folders, integrated into Zen's native vertical tab strip.",
   "browser_specific_settings": {
     "gecko": {
-      "id": "zen-tree-tabs@ludonope",
+      "id": "zen-tree-tabs-with-folders@ludonope",
       "strict_min_version": "140.0"
     }
   },
