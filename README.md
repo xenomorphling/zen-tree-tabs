@@ -50,15 +50,16 @@ tell it apart from the original in Sine's mod list and in `about:addons`.
 ### Folders
 
 A folder is a row in the tab list with a name, so it nests like any other tree
-node. Only the rows you see exist: closing the last tab inside a folder removes
-the folder.
+node. A folder stays until you remove it with **Unpack Folder**, even when it is
+empty: closing its last tab, or moving tabs out, leaves the folder in place, and
+it is still there after a restart.
 
 | Where | Action |
 | --- | --- |
 | Tab menu → **Tree → New Folder** | Wraps the tab in a new folder and opens its name for editing |
 | Folder menu → **Rename Folder…** (or double-click the name) | Renames the folder |
 | Folder menu → **New Subfolder** | Wraps the folder's first child in a nested folder |
-| Folder menu → **Unpack Folder** | Removes the folder and moves its tabs up one level |
+| Folder menu → **Unpack Folder** | Removes the folder for good and moves its tabs up one level |
 | Click a folder | Collapses or expands it (the badge shows how many tabs it hides) |
 | Drag a tab onto the middle of a folder | Puts the tab inside the folder |
 | Drag a folder | Moves the folder and everything inside it |
@@ -73,7 +74,7 @@ created, or `Esc` to drop the folder again.
 - Pinned tabs and essentials are never part of a tree. Pinning a tab, or moving it
   into a folder, takes it out of its tree.
 - Each space has its own trees. A folder belongs to the space its tabs are in;
-  moving its last tab to another space leaves the folder behind.
+  moving its last tab to another space leaves the folder behind, in its space.
 - Tabs that were already open when you install stay flat; trees form as you browse.
 - Zen's drag-to-split still works: hold the dragged tab over another one a little
   longer, until the split preview appears.

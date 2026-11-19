@@ -20,6 +20,8 @@ const ATTR = {
 };
 const NODE_COMPUTED_ATTRS = [ATTR.depth, ATTR.hasChildren, ATTR.hidden];
 const STORE_KEY = "zenTreeTabs";
+/** Folder rows that no tab carries are saved per space on the window. */
+const TAILS_KEY = "zenTreeTabsFolders";
 const SECTION_CLASS = "zen-workspace-normal-tabs-section";
 const FOLDER_CLASS = "ztt-folder";
 const FOLDER_ID_PREFIX = "ztt-folder-";
@@ -45,6 +47,10 @@ const isSplitNode = el => {
 
 /** The tab section an element lives in, if any. */
 const sectionOf = el => el?.closest?.(`.${SECTION_CLASS}`) ?? null;
+
+/** A stable key for a space's tab section, used to save its folder rows. */
+const sectionKey = section =>
+  section.getAttribute("zen-workspace-id") || section.id || "";
 
 // The renderer runs on every tab switch: only touch the DOM when a value really
 // changes, so it doesn't trigger restyles or wake other attribute observers.

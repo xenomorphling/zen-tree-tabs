@@ -207,7 +207,6 @@ class FolderDrag {
 
   #apply(folder, target, zone) {
     const tree = this.#tree;
-    const oldParent = tree.parentOf(folder);
     // Find the spot before the folder joins the target's tree: otherwise the
     // folder's own subtree is part of the target's descendants.
     const anchor = zone === "before" ? target : tree.lastElementOf(target);
@@ -223,7 +222,6 @@ class FolderDrag {
         tree.moveSubtreesAfter([folder], anchor);
       }
     }
-    this.#ctrl.pruneFolder(oldParent);
     this.#ctrl.rebuild();
   }
 }

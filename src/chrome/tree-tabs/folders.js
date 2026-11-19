@@ -8,8 +8,12 @@
  * Persistence: a folder row has no tab to save state on, so its record is
  * saved on the tab that comes right after it (see Store). That tab's saved
  * state lists the folder rows that must be (re)created before it, in order.
- * A tab that follows several nested folders gets them all in one list. A folder
- * left without any tab is dropped (see Controller.pruneFolder).
+ * A tab that follows several nested folders gets them all in one list.
+ *
+ * Folder rows at the end of a space, with no tab after them (an empty folder,
+ * for one), have no tab to ride on: they are saved on the window instead, per
+ * space (see Store.restoreTails). A folder is never removed on its own; only
+ * "Unpack Folder" takes one away.
  */
 "use strict";
 
@@ -81,11 +85,6 @@ class Folders {
     };
   }
 
-  /** A folder with no tab left in it is not worth keeping. */
-  isEmpty(folder) {
-    return this.#tree.tabsOf(this.#tree.descendantsOf(folder)).length === 0;
-  }
-
   /** Saves nothing about folders that are not anchored below a tree node. */
   recordsAround(tab) {
     const node = this.#tree.nodeOf(tab);
@@ -103,6 +102,41 @@ class Folders {
     }
     this.#dropUnwanted(this.#ownedBy(node), records);
     this.#ensure(node, records);
+  }
+
+  /**
+   * Folder rows that no tab carries: those after the last node of a space.
+   *
+   * @returns [[sectionKey, records]] for every space that has such rows.
+   */
+  savedTails() {
+    const out = [];
+    for (const section of document.querySelectorAll(`.${SECTION_CLASS}`)) {
+      const records = this.#sectionFolders(section).tail.map(folder => this.recordOf(folder));
+      if (records.length) {
+        out.push([sectionKey(section), records]);
+      }
+    }
+    return out;
+  }
+
+  /** Puts a space's saved unanchored rows back at its end. */
+  restoreTails(section, records) {
+    let previous = this.#endAnchor(section);
+    for (const record of records) {
+      let folder = document.getElementById(record.id);
+      if (!isFolder(folder)) {
+        folder = this.create(record);
+        if (previous) {
+          previous.after(folder);
+        } else {
+          section.append(folder);
+        }
+      } else {
+        this.update(folder, record);
+      }
+      previous = folder;
+    }
   }
 
   /** Caches folder ownership for the duration of one persist pass. */
@@ -168,17 +202,19 @@ class Folders {
     if (!section) {
       return [];
     }
-    return this.#ownersOf(section).get(node) ?? [];
+    return this.#sectionFolders(section).byNode.get(node) ?? [];
   }
 
-  #ownersOf(section) {
-    if (this.#owners) {
-      const cached = this.#owners.get(section);
-      if (cached) {
-        return cached;
-      }
+  /**
+   * Folder rows of a space, grouped by the node that carries them. Rows after
+   * the last node belong to no node and are kept in `tail`.
+   */
+  #sectionFolders(section) {
+    const cached = this.#owners?.get(section);
+    if (cached) {
+      return cached;
     }
-    const map = new Map();
+    const byNode = new Map();
     let pending = [];
     for (const el of section.children) {
       if (isFolder(el)) {
@@ -189,15 +225,23 @@ class Folders {
         continue; // closing tabs and other transient elements
       }
       if (pending.length) {
-        map.set(el, pending);
+        byNode.set(el, pending);
         pending = [];
       }
     }
-    // Empty folder rows at the end of the section have no tab after them.
-    if (this.#owners) {
-      this.#owners.set(section, map);
+    const result = { byNode, tail: pending };
+    this.#owners?.set(section, result);
+    return result;
+  }
+
+  /** The last row of a space, where unanchored folder rows go. */
+  #endAnchor(section) {
+    for (let el = section.lastElementChild; el; el = el.previousElementSibling) {
+      if (isFolder(el) || this.#tree.isNode(el)) {
+        return el;
+      }
     }
-    return map;
+    return null;
   }
 
   #dropUnwanted(local, records) {
@@ -215,21 +259,15 @@ class Folders {
       let folder = document.getElementById(record.id);
       if (!isFolder(folder)) {
         folder = this.create(record);
-        if (previous) {
-          previous.after(folder);
-        } else {
-          node.before(folder);
-        }
       } else {
         this.update(folder, record);
-        if (sectionOf(folder) !== sectionOf(node)) {
-          // Moved to another space: keep the row with the tab that carries it.
-          if (previous) {
-            previous.after(folder);
-          } else {
-            node.before(folder);
-          }
-        }
+      }
+      // The row must sit right before the tab that carries it (or right after
+      // the row before it). A row created early from the window's tail list, or
+      // moved to another space meanwhile, gets put in place here.
+      const anchor = previous ?? node;
+      if (folder.parentElement !== anchor.parentElement || folder.nextElementSibling !== anchor) {
+        anchor.before(folder);
       }
       previous = folder;
     }

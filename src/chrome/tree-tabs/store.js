@@ -3,12 +3,16 @@
  * of the tab in Zen's other synced windows, matched by tab id.
  *
  * Folder rows have no tab of their own, so the tab right after a folder saves
- * that folder's record in its own state (see Folders). */
+ * that folder's record in its own state (see Folders). Rows after the last tab
+ * of a space have nothing to ride on, so they are saved on the window instead,
+ * per space: that keeps empty folders alive across restarts. */
 "use strict";
 
 class Store {
   /** tab -> last persisted state string, to only write/broadcast changes. */
   #saved = new WeakMap();
+  /** Last saved window-level folder list, to only write changes. */
+  #savedTails = null;
   #onRemoteChange;
   #folders;
 
@@ -61,8 +65,45 @@ class Store {
       for (const tab of gBrowser.tabs) {
         this.#persist(tab);
       }
+      this.#persistTails();
     } finally {
       this.#folders.endPass();
+    }
+  }
+
+  /** Saves the folder rows that no tab carries (empty or trailing folders). */
+  #persistTails() {
+    const values = {};
+    for (const [key, records] of this.#folders.savedTails()) {
+      if (key) {
+        values[key] = records;
+      }
+    }
+    const value = Object.keys(values).length ? JSON.stringify(values) : "";
+    if (value === this.#savedTails) {
+      return;
+    }
+    this.#savedTails = value;
+    if (value) {
+      SessionStore.setCustomWindowValue(window, TAILS_KEY, value);
+    } else {
+      SessionStore.deleteCustomWindowValue(window, TAILS_KEY);
+    }
+  }
+
+  /** Puts back the folder rows saved on the window, for every space. */
+  restoreTails() {
+    let values = {};
+    try {
+      values = JSON.parse(SessionStore.getCustomWindowValue(window, TAILS_KEY) || "{}");
+    } catch {
+      return;
+    }
+    for (const section of document.querySelectorAll(`.${SECTION_CLASS}`)) {
+      const records = values[sectionKey(section)];
+      if (Array.isArray(records) && records.length) {
+        this.#folders.restoreTails(section, records);
+      }
     }
   }
 

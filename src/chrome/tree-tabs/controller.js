@@ -65,6 +65,8 @@ class ZenTreeTabs {
     for (const tab of gBrowser.tabs) {
       this.store.pull(tab);
     }
+    // Folders no tab carries (empty ones, trailing ones) live on the window.
+    this.store.restoreTails();
     this.rebuild();
   }
 
@@ -119,13 +121,10 @@ class ZenTreeTabs {
         }
         this.scheduleFlush(); // highlight the new active path
         break;
-      case "TabPinned": {
-        const folder = this.tree.parentOf(this.nodeOf(target));
+      case "TabPinned":
         this.tree.detach(target);
-        this.pruneFolder(folder);
         this.scheduleFlush();
         break;
-      }
       case "SSTabRestoring":
         this.store.restore(target);
         this.scheduleFlush();
@@ -161,7 +160,6 @@ class ZenTreeTabs {
 
   #onTabClose(tab) {
     const tree = this.tree;
-    const folder = tree.parentOf(tree.nodeOf(tab));
     // Zen may already have dissolved the split group, so use the remembered mates.
     const others = (this.renderer.splitMates.get(tab) ?? []).filter(t => t.isConnected && !t.closing);
     if (others.length) {
@@ -185,7 +183,6 @@ class ZenTreeTabs {
     } else {
       tree.promoteChildren(tab);
     }
-    this.pruneFolder(folder);
     this.scheduleFlush();
   }
 
@@ -232,9 +229,6 @@ class ZenTreeTabs {
       // For split groups this also gives every member the same parent, so
       // whichever tab survives the split keeps the group's place.
       tree.setParent(node, newParent);
-    }
-    if (newParent !== oldParent) {
-      this.pruneFolder(oldParent);
     }
   }
 
@@ -293,9 +287,7 @@ class ZenTreeTabs {
       for (const tab of grouped) {
         // Folders take tabs out of the tree; split views keep them in as a group node.
         if (tab.isConnected && tab.group && !this.tree.splitGroupOf(tab)) {
-          const folder = this.tree.parentOf(this.tree.nodeOf(tab));
           this.tree.detach(tab);
-          this.pruneFolder(folder);
         }
       }
 
@@ -312,11 +304,11 @@ class ZenTreeTabs {
       for (const node of sorted) {
         this.#onNodeMoved(node);
       }
-      this.pruneLooseFolders();
     } catch (e) {
       console.error("zen-tree-tabs: flush failed", e);
     }
     this.dnd.intent = null;
+    this.store.restoreTails();
     this.rebuild();
   }
 
@@ -373,10 +365,8 @@ class ZenTreeTabs {
     if (!sibling) {
       return;
     }
-    const oldParent = tree.parentOf(node);
     tree.setParent(node, sibling);
     tree.setCollapsedAttr(sibling, false);
-    this.pruneFolder(oldParent);
     this.rebuild();
   }
 
@@ -387,10 +377,8 @@ class ZenTreeTabs {
     if (!parent) {
       return;
     }
-    const oldParent = tree.parentOf(parent);
     this.#moveSubtreeAfterTree(node, parent);
     tree.setParentId(node, tree.parentIdOf(parent));
-    this.pruneFolder(oldParent);
     this.rebuild();
   }
 
@@ -404,10 +392,8 @@ class ZenTreeTabs {
     while (tree.parentOf(root)) {
       root = tree.parentOf(root);
     }
-    const oldParent = tree.parentOf(node);
     this.#moveSubtreeAfterTree(node, root);
     tree.setParent(node, null);
-    this.pruneFolder(oldParent);
     this.rebuild();
   }
 
@@ -464,29 +450,8 @@ class ZenTreeTabs {
     for (const child of tree.childrenOf(folder)) {
       tree.setParentId(child, parentId);
     }
-    const parent = tree.parentOf(folder);
     folder.remove();
-    this.pruneFolder(parent);
     this.rebuild();
-  }
-
-  /** Removes a folder row that lost its last tab, and empty folders above it. */
-  pruneFolder(folder) {
-    let current = folder;
-    while (isFolder(current) && current.isConnected && this.folders.isEmpty(current)) {
-      const parent = this.tree.parentOf(current);
-      current.remove();
-      current = parent;
-    }
-  }
-
-  /** Removes folders left empty by moves Zen made on its own (e.g. to another space). */
-  pruneLooseFolders() {
-    for (const folder of document.querySelectorAll(`.${FOLDER_CLASS}`)) {
-      if (folder.isConnected && this.folders.isEmpty(folder)) {
-        this.pruneFolder(folder);
-      }
-    }
   }
 
   /** Swaps `node` with the sibling above it, subtree and all. */
